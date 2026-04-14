@@ -389,6 +389,12 @@ void AppConfig::set_defaults()
         set("prefered_filament_map_mode",ConfigOptionEnum<FilamentMapMode>::get_enum_names()[FilamentMapMode::fmmAutoForFlush]);
     }
 
+#ifdef ENABLE_FULLSPECTRUM
+    if (get("auto_generate_gradients").empty()) {
+        set_bool("auto_generate_gradients", true);
+    }
+#endif
+
     if (get("show_home_page").empty()) {
         set_bool("show_home_page", true);
     }

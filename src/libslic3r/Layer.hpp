@@ -71,6 +71,9 @@ public:
     // (this collection contains only ExtrusionEntityCollection objects)
     ExtrusionEntityCollection   fills;
 
+#ifdef ENABLE_FULLSPECTRUM
+    unsigned int extruder(FlowRole role) const;
+#endif
     Flow    flow(FlowRole role) const;
     Flow    flow(FlowRole role, double layer_height) const;
     Flow    bridging_flow(FlowRole role, bool thick_bridge = false) const;

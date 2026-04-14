@@ -10,6 +10,48 @@
 
 namespace Slic3r {
 
+#ifdef ENABLE_FULLSPECTRUM
+namespace {
+
+SurfaceCollection split_fill_surfaces_by_region(const SurfaceCollection &fill_surfaces, const SurfaceCollection &region_slices)
+{
+    SurfaceCollection out;
+    if (fill_surfaces.empty() || region_slices.empty())
+        return out;
+
+    for (size_t surface_type = 0; surface_type < size_t(stCount); ++surface_type) {
+        Surfaces typed_fill_surfaces;
+        for (const Surface &surface : fill_surfaces.surfaces)
+            if (surface.surface_type == SurfaceType(surface_type))
+                typed_fill_surfaces.emplace_back(surface);
+
+        if (typed_fill_surfaces.empty())
+            continue;
+
+        ExPolygons clipped = intersection_ex(typed_fill_surfaces, region_slices.surfaces, ApplySafetyOffset::Yes);
+        if (!clipped.empty())
+            out.append(std::move(clipped), SurfaceType(surface_type));
+    }
+
+    return out;
+}
+
+using SliceMergeKey = std::tuple<int, double, unsigned short, double, unsigned short>;
+
+SliceMergeKey slice_merge_key(const Surface &surface)
+{
+    return {
+        int(surface.surface_type),
+        surface.thickness,
+        surface.thickness_layers,
+        surface.bridge_angle,
+        surface.extra_perimeters
+    };
+}
+
+} // namespace
+#endif
+
 Layer::~Layer()
 {
     this->lower_layer = this->upper_layer = nullptr;
@@ -222,15 +264,23 @@ void Layer::make_perimeters()
 	            LayerRegion *layerm_config = layerms.front();
 	            {
 	                // group slices (surfaces) according to number of extra perimeters
+#ifdef ENABLE_FULLSPECTRUM
+	                // Keep surface typing intact when compatible regions are merged for perimeter generation.
+	                std::map<SliceMergeKey, Surfaces> slices;
+	                for (LayerRegion *layerm : layerms) {
+	                    for (const Surface &surface : layerm->slices.surfaces)
+	                        slices[slice_merge_key(surface)].emplace_back(surface);
+#else
 	                std::map<unsigned short, Surfaces> slices;  // extra_perimeters => [ surface, surface... ]
 	                for (LayerRegion *layerm : layerms) {
 	                    for (const Surface &surface : layerm->slices.surfaces)
 	                        slices[surface.extra_perimeters].emplace_back(surface);
+#endif
 	                    if (layerm->region().config().sparse_infill_density > layerm_config->region().config().sparse_infill_density)
 	                    	layerm_config = layerm;
 	                }
 	                // merge the surfaces assigned to each group
-	                for (std::pair<const unsigned short,Surfaces> &surfaces_with_extra_perimeters : slices)
+	                for (auto &surfaces_with_extra_perimeters : slices)
 	                    new_slices.append(offset_ex(surfaces_with_extra_perimeters.second, ClipperSafetyOffset), surfaces_with_extra_perimeters.second.front());
 	            }
 

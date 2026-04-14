@@ -130,6 +130,9 @@ set(lisbslic3r_sources
     ExtrusionSimulator.hpp
     FaceDetector.cpp
     FaceDetector.hpp
+    filament_mixer.cpp
+    filament_mixer.h
+    filament_mixer_model.h
     Feature/FuzzySkin/FuzzySkin.cpp
     Feature/FuzzySkin/FuzzySkin.hpp
     Feature/Interlocking/InterlockingGenerator.cpp
@@ -285,6 +288,7 @@ set(lisbslic3r_sources
     Line.hpp
     LocalesUtils.cpp
     LocalesUtils.hpp
+    LocalZOrderOptimizer.hpp
     MarchingSquares.hpp
     Measure.cpp
     Measure.hpp
@@ -294,6 +298,8 @@ set(lisbslic3r_sources
     MinAreaBoundingBox.hpp
     MinimumSpanningTree.cpp
     MinimumSpanningTree.hpp
+    MixedFilament.cpp
+    MixedFilament.hpp
     miniz_extension.cpp
     miniz_extension.hpp
     ModelArrange.cpp
@@ -533,6 +539,9 @@ endif ()
 encoding_check(libslic3r)
 
 target_compile_definitions(libslic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=0)
+if (ENABLE_FULLSPECTRUM)
+    target_compile_definitions(libslic3r PUBLIC ENABLE_FULLSPECTRUM)
+endif ()
 target_include_directories(libslic3r PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(libslic3r SYSTEM PUBLIC ${EXPAT_INCLUDE_DIRS})
 
