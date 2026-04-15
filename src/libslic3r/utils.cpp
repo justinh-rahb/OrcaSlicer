@@ -2,6 +2,7 @@
 #include "I18N.hpp"
 
 #include <atomic>
+#include <cstdlib>
 #include <locale>
 #include <ctime>
 #include <cstdarg>
@@ -60,6 +61,7 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/nowide/convert.hpp>
+#include <boost/nowide/cstdlib.hpp>
 #include <boost/nowide/cstdio.hpp>
 
 // We are using quite an old TBB 2017 U7, which does not support global control API officially.
@@ -342,10 +344,19 @@ void set_log_path_and_level(const std::string& file, unsigned int level)
 	}
 #endif
 
-	//BBS log file at C:\\Users\\[yourname]\\AppData\\Roaming\\OrcaSlicer\\log\\[log_filename].log
-	auto log_folder = boost::filesystem::path(g_data_dir) / "log";
+	// Prefer LOCALAPPDATA on Windows so runtime logs are written under:
+	// C:\\Users\\[user]\\AppData\\Local\\OrcaSlicer\\log\\*.log
+	// Keep g_data_dir fallback for non-Windows or missing environment.
+	boost::filesystem::path log_folder = boost::filesystem::path(g_data_dir) / "log";
+#ifdef _WIN32
+	// boost::filesystem is configured to interpret narrow paths as UTF-8.
+	// On Windows, std::getenv() may return ANSI-encoded bytes, which breaks
+	// non-ASCII profile paths (for example usernames containing umlauts).
+	if (const char *local_appdata = boost::nowide::getenv("LOCALAPPDATA"); local_appdata != nullptr && *local_appdata != '\0')
+		log_folder = boost::filesystem::path(local_appdata) / "OrcaSlicer" / "log";
+#endif
 	if (!boost::filesystem::exists(log_folder)) {
-		boost::filesystem::create_directory(log_folder);
+		boost::filesystem::create_directories(log_folder);
 	}
 	auto full_path = (log_folder / file).make_preferred();
 

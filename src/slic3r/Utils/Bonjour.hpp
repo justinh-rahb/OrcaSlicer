@@ -157,9 +157,12 @@ public:
 		, const boost::asio::ip::address& multicast_address
 		, std::shared_ptr< boost::asio::io_service > io_service);
 
+	~UdpSocket();
+
 	void send();
 	void async_receive();
-	void cancel() { socket.cancel(); }
+	void cancel();
+	bool is_usable() const { return m_socket_usable; }
 protected:
 	void receive_handler(SharedSession session, const boost::system::error_code& error, size_t bytes);
 	virtual SharedSession create_session() const = 0;
@@ -170,6 +173,7 @@ protected:
 	boost::asio::ip::udp::endpoint					mcast_endpoint;
 	std::shared_ptr< boost::asio::io_service >	io_service;
 	std::vector<BonjourRequest>						requests;
+	bool                                            m_socket_usable { true };
 };
 
 class LookupSocket : public UdpSocket
