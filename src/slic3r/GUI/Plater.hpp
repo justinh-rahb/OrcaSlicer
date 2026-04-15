@@ -181,6 +181,10 @@ public:
     // BBS. Add filament_added() method.
     void on_filament_count_change(size_t num_filaments);
     void on_filaments_delete(size_t filament_id);
+#ifdef ENABLE_FULLSPECTRUM
+    void update_mixed_filament_panel(bool sync_manager = true);
+    std::vector<unsigned int> get_ui_ordered_filament_ids() const;
+#endif
 
     void add_filament();
     void delete_filament(size_t filament_id = size_t(-1), int replace_filament_id = -1);  // 0 base, -1 means default
@@ -556,6 +560,11 @@ public:
     void on_filament_change(size_t filament_idx);
     void on_filament_count_change(size_t extruders_count);
     void on_filaments_delete(size_t extruders_count, size_t filament_id, int replace_filament_id = -1);
+#ifdef ENABLE_FULLSPECTRUM
+    void on_filaments_change(size_t num_filaments);
+    bool confirm_auto_generated_gradients(size_t num_physical);
+    void set_auto_generated_gradient_decision(size_t num_physical, bool create_auto_gradients);
+#endif
     std::vector<Slic3r::ColorRGBA> get_extruders_colors();
     // BBS
     void on_bed_type_change(BedType bed_type);
@@ -567,7 +576,7 @@ public:
     void force_print_bed_update();
     // On activating the parent window.
     void on_activate();
-    std::vector<std::string> get_extruder_colors_from_plater_config(const GCodeProcessorResult* const result = nullptr) const;
+    std::vector<std::string> get_extruder_colors_from_plater_config(const GCodeProcessorResult* const result = nullptr, bool include_mixed = true) const;
     std::vector<std::string> get_filament_colors_render_info() const;
     std::vector<std::string> get_filament_color_render_type() const;
     std::vector<std::string> get_colors_for_color_print(const GCodeProcessorResult* const result = nullptr) const;

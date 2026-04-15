@@ -1,5 +1,9 @@
 #include "Plater.hpp"
 #include "libslic3r/Config.hpp"
+#ifdef ENABLE_FULLSPECTRUM
+#include "libslic3r/MixedFilament.hpp"
+#include "libslic3r/filament_mixer.h"
+#endif
 #include "libslic3r_version.h"
 
 #include <cstddef>
@@ -36,14 +40,23 @@
 #include <wx/numdlg.h>
 #include <wx/debug.h>
 #include <wx/busyinfo.h>
+#include <wx/dcbuffer.h>
+#include <wx/scrolwin.h>
 #include <wx/event.h>
 #include <wx/wrapsizer.h>
+#include <wx/choice.h>
+#include <wx/gauge.h>
+#include <wx/slider.h>
+#include <wx/textctrl.h>
+#include <wx/weakref.h>
 #ifdef _WIN32
 #include <wx/richtooltip.h>
 #include <wx/custombgwin.h>
 #include <wx/popupwin.h>
 #endif
 #include <wx/clrpicker.h>
+#include <wx/spinctrl.h>
+#include <wx/timer.h>
 #include <wx/tokenzr.h>
 #include <wx/aui/aui.h>
 
@@ -112,6 +125,9 @@
 #include "ConfigWizard.hpp"
 #include "SyncAmsInfoDialog.hpp"
 #include "../Utils/ASCIIFolding.hpp"
+#ifdef ENABLE_FULLSPECTRUM
+#include "../Utils/ColorSpaceConvert.hpp"
+#endif
 #include "../Utils/FixModelByWin10.hpp"
 #include "../Utils/UndoRedo.hpp"
 #include "../Utils/PresetUpdater.hpp"
@@ -525,6 +541,30 @@ struct Sidebar::priv
     int m_menu_filament_id = -1;
     wxScrolledWindow* m_panel_filament_content;
     wxScrolledWindow* m_scrolledWindow_filament_content;
+
+#ifdef ENABLE_FULLSPECTRUM
+    // Mixed (virtual) filaments panel - collapsible like Printer/Filament sections
+    StaticBox*          m_panel_mixed_filaments_title = nullptr;
+    wxPanel*            m_panel_mixed_filaments_content = nullptr;
+    wxBoxSizer*         m_sizer_mixed_filaments_content = nullptr;
+    ScalableButton*     m_mixed_filaments_icon = nullptr;
+    wxStaticText*       m_staticText_mixed_filaments = nullptr;
+    Button*             m_btn_add_gradient = nullptr;
+    Button*             m_btn_add_pattern = nullptr;
+    Button*             m_btn_add_color = nullptr;
+    bool                m_mixed_filaments_collapsed = false;
+    bool                m_skip_mixed_filament_sync_once = false;
+    std::unordered_set<size_t> m_expanded_mixed_filament_rows;
+    struct MixedFilamentRowBinding {
+        size_t    mixed_id = size_t(-1);
+        wxWindow *row      = nullptr;
+    };
+    std::vector<MixedFilamentRowBinding> m_mixed_filament_row_bindings;
+    std::vector<uint64_t>                m_mixed_filament_ui_order;
+    bool                                 m_mixed_filament_drag_active = false;
+    size_t                               m_mixed_filament_drag_source_mixed_id = size_t(-1);
+#endif
+
     wxStaticLine* m_staticline2;
     wxPanel* m_panel_project_title;
     ScalableButton* m_filament_icon = nullptr;
@@ -1635,11 +1675,6 @@ Sidebar::Sidebar(Plater *parent)
     Choice::register_dynamic_list("wipe_tower_filament", &dynamic_filament_list);
 
     p->scrolled = new wxPanel(this);
-    //    p->scrolled->SetScrollbars(0, 100, 1, 2); // ys_DELETE_after_testing. pixelsPerUnitY = 100
-    // but this cause the bad layout of the sidebar, when all infoboxes appear.
-    // As a result we can see the empty block at the bottom of the sidebar
-    // But if we set this value to 5, layout will be better
-    //p->scrolled->SetScrollRate(0, 5);
     p->scrolled->SetBackgroundColour(*wxWHITE);
 
 
@@ -2201,6 +2236,143 @@ Sidebar::Sidebar(Plater *parent)
 
     scrolled_sizer->Add(p->m_panel_filament_content, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(SidebarProps::ContentMarginV())); // ORCA use vertical margin on parent otherwise it shows scrollbar even on 1 filament
     }
+
+#ifdef ENABLE_FULLSPECTRUM
+    // --- Mixed Filaments Panel (Collapsible) ---
+    {
+    p->m_panel_mixed_filaments_title = new StaticBox(p->scrolled, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxBORDER_NONE);
+    p->m_panel_mixed_filaments_title->SetBackgroundColor(title_bg);
+    p->m_panel_mixed_filaments_title->SetBackgroundColor2(0xF1F1F1);
+
+    p->m_mixed_filaments_icon = new ScalableButton(p->m_panel_mixed_filaments_title, wxID_ANY, "filament");
+    p->m_staticText_mixed_filaments = new Label(p->m_panel_mixed_filaments_title, _L("Mixed Filaments"), LB_PROPAGATE_MOUSE_EVENT);
+
+    p->m_btn_add_gradient = new Button(p->m_panel_mixed_filaments_title, _L("Add Gradient"));
+    p->m_btn_add_gradient->SetStyle(ButtonStyle::Confirm, ButtonType::Compact);
+    p->m_btn_add_gradient->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (wxGetApp().preset_bundle) {
+            auto &mgr = wxGetApp().preset_bundle->mixed_filaments;
+            ConfigOptionStrings *co = wxGetApp().preset_bundle->project_config.option<ConfigOptionStrings>("filament_colour");
+            std::vector<std::string> colors = co ? co->values : std::vector<std::string>();
+            mgr.add_custom_filament(1, 2, 50, colors);
+            if (ConfigOptionString *opt = wxGetApp().preset_bundle->project_config.option<ConfigOptionString>("mixed_filament_definitions"))
+                opt->value = mgr.serialize_custom_entries();
+            update_mixed_filament_panel(false);
+            m_scrolled_sizer->Layout();
+        }
+    });
+
+    p->m_btn_add_pattern = new Button(p->m_panel_mixed_filaments_title, _L("Add Pattern"));
+    p->m_btn_add_pattern->SetStyle(ButtonStyle::Confirm, ButtonType::Compact);
+    p->m_btn_add_pattern->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (wxGetApp().preset_bundle) {
+            auto &mgr = wxGetApp().preset_bundle->mixed_filaments;
+            ConfigOptionStrings *co = wxGetApp().preset_bundle->project_config.option<ConfigOptionStrings>("filament_colour");
+            std::vector<std::string> colors = co ? co->values : std::vector<std::string>();
+            mgr.add_custom_filament(1, 2, 50, colors);
+            auto &mfs = mgr.mixed_filaments();
+            if (!mfs.empty()) {
+                mfs.back().manual_pattern = "12";
+                mfs.back().custom = true;
+            }
+            if (ConfigOptionString *opt = wxGetApp().preset_bundle->project_config.option<ConfigOptionString>("mixed_filament_definitions"))
+                opt->value = mgr.serialize_custom_entries();
+            update_mixed_filament_panel(false);
+            m_scrolled_sizer->Layout();
+        }
+    });
+
+    p->m_btn_add_color = new Button(p->m_panel_mixed_filaments_title, _L("Add Color"));
+    p->m_btn_add_color->SetStyle(ButtonStyle::Confirm, ButtonType::Compact);
+    p->m_btn_add_color->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (wxGetApp().preset_bundle == nullptr)
+            return;
+        ConfigOptionStrings *co = wxGetApp().preset_bundle->project_config.option<ConfigOptionStrings>("filament_colour");
+        const std::vector<std::string> colors = co ? co->values : std::vector<std::string>();
+        if (colors.size() < 2)
+            return;
+        const MixedColorMatchRecipeResult recipe =
+            prompt_best_color_match_recipe(this, colors, Plater::get_next_color_for_filament());
+        if (recipe.cancelled)
+            return;
+        if (!recipe.valid) {
+            show_error(this, _L("Unable to create a color match from the current physical filament colors."));
+            return;
+        }
+        auto &mgr = wxGetApp().preset_bundle->mixed_filaments;
+        mgr.add_custom_filament(recipe.component_a, recipe.component_b, recipe.mix_b_percent, colors);
+        auto &mfs = mgr.mixed_filaments();
+        if (!mfs.empty()) {
+            MixedFilament &created = mfs.back();
+            created.manual_pattern = recipe.manual_pattern;
+            created.mix_b_percent  = recipe.mix_b_percent;
+            created.gradient_component_ids = recipe.gradient_component_ids;
+            created.gradient_component_weights = recipe.gradient_component_weights;
+            created.pointillism_all_filaments = false;
+            created.distribution_mode = recipe.gradient_component_ids.empty() ? int(MixedFilament::Simple) : int(MixedFilament::LayerCycle);
+            created.custom = true;
+            created.display_color = recipe.preview_color.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
+        }
+        if (ConfigOptionString *opt = wxGetApp().preset_bundle->project_config.option<ConfigOptionString>("mixed_filament_definitions"))
+            opt->value = mgr.serialize_custom_entries();
+        update_mixed_filament_panel(false);
+        m_scrolled_sizer->Layout();
+    });
+
+    wxBoxSizer* h_sizer_mixed_title = new wxBoxSizer(wxHORIZONTAL);
+    h_sizer_mixed_title->Add(p->m_mixed_filaments_icon, 0, wxALIGN_CENTER | wxLEFT, FromDIP(SidebarProps::TitlebarMargin()));
+    h_sizer_mixed_title->AddSpacer(FromDIP(SidebarProps::ElementSpacing()));
+    h_sizer_mixed_title->Add(p->m_staticText_mixed_filaments, 0, wxALIGN_CENTER);
+    h_sizer_mixed_title->AddStretchSpacer();
+    h_sizer_mixed_title->Add(p->m_btn_add_gradient, 0, wxALIGN_CENTER | wxRIGHT, FromDIP(SidebarProps::ElementSpacing()));
+    h_sizer_mixed_title->Add(p->m_btn_add_pattern, 0, wxALIGN_CENTER | wxRIGHT, FromDIP(SidebarProps::ElementSpacing()));
+    h_sizer_mixed_title->Add(p->m_btn_add_color, 0, wxALIGN_CENTER | wxRIGHT, FromDIP(SidebarProps::TitlebarMargin()));
+    h_sizer_mixed_title->SetMinSize(-1, FromDIP(30));
+
+    p->m_panel_mixed_filaments_title->SetSizer(h_sizer_mixed_title);
+    p->m_panel_mixed_filaments_title->Layout();
+
+    auto spliter_mixed_1 = new ::StaticLine(p->scrolled);
+    spliter_mixed_1->SetLineColour("#A6A9AA");
+    scrolled_sizer->Add(spliter_mixed_1, 0, wxEXPAND);
+    scrolled_sizer->Add(p->m_panel_mixed_filaments_title, 0, wxEXPAND | wxALL, 0);
+    auto spliter_mixed_2 = new ::StaticLine(p->scrolled);
+    spliter_mixed_2->SetLineColour("#CECECE");
+    scrolled_sizer->Add(spliter_mixed_2, 0, wxEXPAND);
+
+    p->m_panel_mixed_filaments_content = new wxPanel(p->scrolled, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+    {
+        const bool is_dark = wxGetApp().dark_mode();
+        p->m_panel_mixed_filaments_content->SetBackgroundColour(is_dark ? wxColour(45, 45, 49) : wxColour(255, 255, 255));
+    }
+    p->m_sizer_mixed_filaments_content = new wxBoxSizer(wxVERTICAL);
+    p->m_sizer_mixed_filaments_content->AddSpacer(FromDIP(SidebarProps::ContentMargin()));
+    p->m_panel_mixed_filaments_content->SetSizer(p->m_sizer_mixed_filaments_content);
+    p->m_panel_mixed_filaments_content->Layout();
+    scrolled_sizer->Add(p->m_panel_mixed_filaments_content, 0, wxEXPAND, 0);
+
+    p->m_panel_mixed_filaments_title->Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& e) {
+        int button_left = p->m_panel_mixed_filaments_title->GetClientSize().x;
+        auto consider_button = [&button_left](wxWindow *button) {
+            if (button && button->IsShown())
+                button_left = std::min(button_left, button->GetPosition().x);
+        };
+        consider_button(p->m_btn_add_gradient);
+        consider_button(p->m_btn_add_pattern);
+        consider_button(p->m_btn_add_color);
+        if (e.GetPosition().x > button_left - FromDIP(12))
+            return;
+        if (p->m_panel_mixed_filaments_content->GetMaxHeight() == 0)
+            p->m_panel_mixed_filaments_content->SetMaxSize({-1, -1});
+        else
+            p->m_panel_mixed_filaments_content->SetMaxSize({-1, 0});
+        m_scrolled_sizer->Layout();
+    });
+
+    p->m_panel_mixed_filaments_title->Hide();
+    p->m_panel_mixed_filaments_content->Hide();
+    }
+#endif // ENABLE_FULLSPECTRUM
 
     {
     //add project title
@@ -3063,13 +3235,32 @@ void Sidebar::jump_to_option(size_t selected)
 //    wxGetApp().mainframe->select_tab();
 }
 
+// FullSpectrum mixed filament panel implementation
+#ifdef ENABLE_FULLSPECTRUM
+#include "Plater_MixedFilament.inl"
+#endif
+
 // BBS. Move logic from Plater::on_extruders_change() to Sidebar::on_filament_count_change().
 void Sidebar::on_filament_count_change(size_t num_filaments)
 {
     auto& choices = combos_filament();
 
-    if (num_filaments == choices.size())
+    if (num_filaments == choices.size()) {
+#ifdef ENABLE_FULLSPECTRUM
+        // Project load may keep the same physical filament count while mixed
+        // definitions changed. Refresh mixed panel even without count changes.
+        const bool sync_manager = !p->m_skip_mixed_filament_sync_once;
+        p->m_skip_mixed_filament_sync_once = false;
+        update_ui_from_settings();
+        update_dynamic_filament_list();
+        update_mixed_filament_panel(sync_manager);
+#endif
         return;
+    }
+
+#ifdef ENABLE_FULLSPECTRUM
+    p->m_skip_mixed_filament_sync_once = false;
+#endif
 
     if (choices.size() == 1 || num_filaments == 1)
         choices[0]->GetDropDown().Invalidate();
@@ -3110,6 +3301,9 @@ void Sidebar::on_filament_count_change(size_t num_filaments)
     p->m_panel_filament_title->Refresh();
     update_ui_from_settings();
     update_dynamic_filament_list();
+#ifdef ENABLE_FULLSPECTRUM
+    update_mixed_filament_panel();
+#endif
 }
 
 void Sidebar::on_filaments_delete(size_t filament_id)
@@ -3170,6 +3364,9 @@ void Sidebar::on_filaments_delete(size_t filament_id)
     p->m_panel_filament_title->Refresh();
     update_ui_from_settings();
     dynamic_filament_list.update();
+#ifdef ENABLE_FULLSPECTRUM
+    update_mixed_filament_panel();
+#endif
 }
 
 void Sidebar::add_filament() {
@@ -3228,6 +3425,9 @@ void Sidebar::add_custom_filament(wxColour new_col) {
     if (p->combos_filament.size() >= MAXIMUM_EXTRUDER_NUMBER) return;
 
     int         filament_count = p->combos_filament.size() + 1;
+#ifdef ENABLE_FULLSPECTRUM
+    wxGetApp().plater()->confirm_auto_generated_gradients(filament_count);
+#endif
     std::string new_color      = new_col.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
     wxGetApp().preset_bundle->set_num_filaments(filament_count, new_color);
     wxGetApp().plater()->get_partplate_list().on_filament_added(filament_count);
@@ -4122,7 +4322,7 @@ void Sidebar::auto_calc_flushing_volumes_internal(const int modify_id, const int
     int m_max_flush_volume = Slic3r::g_max_flush_volume;
     unsigned int m_number_of_extruders = (int)(sqrt(init_matrix.size()) + 0.001);
 
-    const std::vector<std::string> extruder_colours = wxGetApp().plater()->get_extruder_colors_from_plater_config();
+    const std::vector<std::string> extruder_colours = wxGetApp().plater()->get_extruder_colors_from_plater_config(nullptr, false);
     std::vector<std::vector<wxColour>> multi_colours;
 
     // Support for multi-color filament
@@ -4381,9 +4581,13 @@ struct Plater::priv
     static const std::regex pattern_prusa;
 
     bool m_is_dark = false;
+    size_t m_last_auto_gradient_prompt_physical_count = 0;
+    bool   m_last_auto_gradient_prompt_accepted = false;
 
     priv(Plater *q, MainFrame *main_frame);
     ~priv();
+    bool confirm_auto_generated_gradients(wxWindow *parent, size_t num_physical);
+    void set_auto_generated_gradient_decision(size_t num_physical, bool create_auto_gradients);
 
 
     bool need_update() const { return m_need_update; }
@@ -4881,10 +5085,18 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         "extruder_colour", "filament_colour", "filament_type", "material_colour", "printable_height", "extruder_printable_height", "printer_model", "printer_technology",
         // These values are necessary to construct SlicingParameters by the Canvas3D variable layer height editor.
         "layer_height", "initial_layer_print_height", "min_layer_height", "max_layer_height",
-        "brim_width", "wall_loops", "wall_filament", "sparse_infill_density", "sparse_infill_filament", "top_shell_layers",
+        "brim_width", "wall_loops", "wall_filament", "sparse_infill_density",
+#ifdef ENABLE_FULLSPECTRUM
+        "enable_infill_filament_override", "infill_filament_use_base_first_layers", "infill_filament_use_base_last_layers",
+#endif
+        "sparse_infill_filament", "top_shell_layers",
         "enable_support", "support_filament", "support_interface_filament",
         "support_top_z_distance", "support_bottom_z_distance", "raft_layers",
-        "wipe_tower_rotation_angle", "wipe_tower_cone_angle", "wipe_tower_extra_spacing", "wipe_tower_extra_flow", "wipe_tower_max_purge_speed",
+        "wipe_tower_rotation_angle", "wipe_tower_cone_angle", "wipe_tower_extra_spacing", "wipe_tower_extra_flow",
+#ifdef ENABLE_FULLSPECTRUM
+        "local_z_wipe_tower_purge_lines",
+#endif
+        "wipe_tower_max_purge_speed",
         "wipe_tower_wall_type", "wipe_tower_extra_rib_length","wipe_tower_rib_width","wipe_tower_fillet_wall",
         "wipe_tower_filament",
         "best_object_pos",  "master_extruder_id"
@@ -5954,6 +6166,32 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                             << boost::format(", plate_data.size %1%, project_preset.size %2%, is_bbs_3mf %3%, file_version %4% \n") % plate_data.size() %
                                                    project_presets.size() % (en_3mf_file_type == En3mfType::From_BBS) % file_version.to_string();
 
+                    auto imported_string_count = [&config_loaded](const char *key) -> size_t {
+                        if (const auto *opt = config_loaded.option<ConfigOptionStrings>(key))
+                            return opt->values.size();
+                        return 0;
+                    };
+                    auto imported_float_count = [&config_loaded](const char *key) -> size_t {
+                        if (const auto *opt = config_loaded.option<ConfigOptionFloats>(key))
+                            return opt->values.size();
+                        return 0;
+                    };
+
+                    std::vector<std::string> imported_filament_colors;
+                    size_t imported_physical_filaments = 0;
+                    if (const auto *filament_colors_opt = config_loaded.option<ConfigOptionStrings>("filament_colour")) {
+                        imported_filament_colors = filament_colors_opt->values;
+                        imported_physical_filaments = imported_filament_colors.size();
+                    }
+                    if (imported_physical_filaments == 0)
+                        imported_physical_filaments = imported_string_count("filament_settings_id");
+                    if (imported_physical_filaments == 0)
+                        imported_physical_filaments = imported_string_count("filament_ids");
+                    if (imported_physical_filaments == 0)
+                        imported_physical_filaments = imported_string_count("default_filament_colour");
+                    if (imported_physical_filaments == 0)
+                        imported_physical_filaments = imported_float_count("nozzle_diameter");
+
                     // 1. add extruder for prusa model if the number of existing extruders is not enough
                     // 2. add extruder for BBS or Other model if only import geometry
                     if (en_3mf_file_type == En3mfType::From_Prusa || (load_model && !load_config)) {
@@ -5966,10 +6204,65 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             }
                         }
                         int size = extruderIds.size() == 0 ? 0 : *(extruderIds.rbegin());
+                        const bool geometry_only_project_import = load_model && !load_config && imported_physical_filaments > 0;
+                        const size_t desired_physical_filaments = geometry_only_project_import ?
+                            std::min(imported_physical_filaments, size_t(MAXIMUM_EXTRUDER_NUMBER)) : 0;
+                        BOOST_LOG_TRIVIAL(info) << "3MF geometry import filament detection"
+                                                << " imported_physical=" << imported_physical_filaments
+                                                << " imported_colors=" << imported_filament_colors.size()
+                                                << " config_filament_settings_id=" << imported_string_count("filament_settings_id")
+                                                << " config_filament_ids=" << imported_string_count("filament_ids")
+                                                << " config_default_filament_colour=" << imported_string_count("default_filament_colour")
+                                                << " config_nozzle_diameter=" << imported_float_count("nozzle_diameter")
+                                                << " model_max_extruder=" << size
+                                                << " geometry_only_project_import=" << (geometry_only_project_import ? 1 : 0);
+                        if (geometry_only_project_import)
+                            size = int(desired_physical_filaments);
+
+                        PresetBundle *preset_bundle = wxGetApp().preset_bundle;
+                        if (geometry_only_project_import && preset_bundle != nullptr) {
+                            const size_t current_num_filaments = preset_bundle->filament_presets.size();
+                            const bool current_project_empty = this->model.objects.empty();
+                            if (current_project_empty) {
+                                static const t_config_option_keys imported_project_option_keys = {
+                                    "filament_colour",
+                                    "mixed_filament_definitions",
+                                    "mixed_filament_gradient_mode",
+                                    "mixed_filament_height_lower_bound",
+                                    "mixed_filament_height_upper_bound",
+                                    "mixed_filament_advanced_dithering",
+                                    "mixed_filament_pointillism_pixel_size",
+                                    "mixed_filament_pointillism_line_gap",
+                                    "mixed_filament_component_bias_enabled",
+                                    "mixed_filament_surface_indentation"
+                                };
+                                preset_bundle->project_config.apply_only(config_loaded, imported_project_option_keys, true);
+                                if (current_num_filaments != desired_physical_filaments) {
+                                    q->confirm_auto_generated_gradients(desired_physical_filaments);
+                                    preset_bundle->set_num_filaments(unsigned(desired_physical_filaments));
+                                } else
+                                    preset_bundle->update_multi_material_filament_presets();
+                                BOOST_LOG_TRIVIAL(info) << "3MF geometry import applied imported project config"
+                                                        << " current_num_filaments=" << current_num_filaments
+                                                        << " desired_physical_filaments=" << desired_physical_filaments
+                                                        << " mixed_enabled=" << preset_bundle->mixed_filaments.enabled_count();
+                                wxGetApp().plater()->on_filaments_change(desired_physical_filaments);
+                            } else if (current_num_filaments < desired_physical_filaments) {
+                                std::vector<std::string> new_colors;
+                                if (imported_filament_colors.size() > current_num_filaments) {
+                                    new_colors.assign(imported_filament_colors.begin() + current_num_filaments,
+                                                      imported_filament_colors.begin() + desired_physical_filaments);
+                                }
+                                q->confirm_auto_generated_gradients(desired_physical_filaments);
+                                preset_bundle->set_num_filaments(unsigned(desired_physical_filaments), new_colors);
+                                wxGetApp().plater()->on_filaments_change(desired_physical_filaments);
+                            }
+                        }
 
                         int filament_size = sidebar->combos_filament().size();
                         while (filament_size < MAXIMUM_EXTRUDER_NUMBER && filament_size < size) {
                             int         filament_count = filament_size + 1;
+                            wxGetApp().plater()->confirm_auto_generated_gradients(filament_count);
                             wxColour    new_col        = Plater::get_next_color_for_filament();
                             std::string new_color      = new_col.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
                             wxGetApp().preset_bundle->set_num_filaments(filament_count, new_color);
@@ -6368,6 +6661,10 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             // BBS: add preset combo box re-active logic
                             // currently found only needs re-active here
                             wxGetApp().load_current_presets(false, false);
+                            // Some preset-tab refresh paths rebuild printer/filament UI from the
+                            // active presets but do not preserve the mixed manager instance.
+                            // Rebuild it explicitly from project_config before clamping object IDs.
+                            preset_bundle->update_multi_material_filament_presets();
                             // Update filament colors for the MM-printer profile in the full config
                             // to avoid black (default) colors for Extruders in the ObjectList,
                             // when for extruder colors are used filament colors
@@ -10146,6 +10443,76 @@ void Plater::priv::on_repair_model(wxCommandEvent &event)
     wxGetApp().obj_list()->fix_through_netfabb();
 }
 
+bool Plater::priv::confirm_auto_generated_gradients(wxWindow *parent, size_t num_physical)
+{
+    auto *app_config = wxGetApp().app_config;
+    if (app_config == nullptr)
+        return MixedFilamentManager::auto_generate_enabled();
+
+    const bool pref_enabled = app_config->get_bool("auto_generate_gradients");
+    if (!pref_enabled) {
+        m_last_auto_gradient_prompt_physical_count = 0;
+        m_last_auto_gradient_prompt_accepted = false;
+        MixedFilamentManager::set_auto_generate_enabled(false);
+        return false;
+    }
+
+    if (num_physical <= 4) {
+        m_last_auto_gradient_prompt_physical_count = 0;
+        m_last_auto_gradient_prompt_accepted = false;
+        MixedFilamentManager::set_auto_generate_enabled(true);
+        return true;
+    }
+
+    if (parent == nullptr || !parent->IsShownOnScreen()) {
+        m_last_auto_gradient_prompt_physical_count = 0;
+        m_last_auto_gradient_prompt_accepted = false;
+        MixedFilamentManager::set_auto_generate_enabled(true);
+        return true;
+    }
+
+    if (m_last_auto_gradient_prompt_physical_count == num_physical) {
+        MixedFilamentManager::set_auto_generate_enabled(m_last_auto_gradient_prompt_accepted);
+        return m_last_auto_gradient_prompt_accepted;
+    }
+
+    const size_t auto_gradient_count = num_physical * (num_physical - 1) / 2;
+    const wxString message = wxString::Format(
+        _L("Using %d physical filaments will create %d auto-generated gradients.\nDo you want to create them now?"),
+        int(num_physical),
+        int(auto_gradient_count));
+    const int result = MessageDialog(parent,
+                                     message,
+                                     wxString(SLIC3R_APP_FULL_NAME) + " - " + _L("Auto gradients"),
+                                     wxYES_NO | wxYES_DEFAULT | wxCENTRE | wxICON_QUESTION)
+                           .ShowModal();
+    const bool accepted = result == wxID_YES;
+    m_last_auto_gradient_prompt_physical_count = num_physical;
+    m_last_auto_gradient_prompt_accepted = accepted;
+    MixedFilamentManager::set_auto_generate_enabled(accepted);
+    return accepted;
+}
+
+void Plater::priv::set_auto_generated_gradient_decision(size_t num_physical, bool create_auto_gradients)
+{
+    m_last_auto_gradient_prompt_physical_count = num_physical;
+    m_last_auto_gradient_prompt_accepted = create_auto_gradients;
+    MixedFilamentManager::set_auto_generate_enabled(create_auto_gradients);
+}
+
+bool Plater::confirm_auto_generated_gradients(size_t num_physical)
+{
+    return p != nullptr ? p->confirm_auto_generated_gradients(this, num_physical) : MixedFilamentManager::auto_generate_enabled();
+}
+
+void Plater::set_auto_generated_gradient_decision(size_t num_physical, bool create_auto_gradients)
+{
+    if (p != nullptr)
+        p->set_auto_generated_gradient_decision(num_physical, create_auto_gradients);
+    else
+        MixedFilamentManager::set_auto_generate_enabled(create_auto_gradients);
+}
+
 void Plater::priv::on_filament_color_changed(wxCommandEvent &event)
 {
     //q->update_all_plate_thumbnails(true);
@@ -10159,6 +10526,12 @@ void Plater::priv::on_filament_color_changed(wxCommandEvent &event)
     if (wxGetApp().app_config->get("auto_calculate_flush") != "disabled") {
         sidebar->auto_calc_flushing_volumes(modify_id);
     }
+
+#ifdef ENABLE_FULLSPECTRUM
+    // Regenerate mixed filaments and refresh the mixed panel.
+    wxGetApp().preset_bundle->update_multi_material_filament_presets();
+    sidebar->update_mixed_filament_panel();
+#endif
 }
 
 void Plater::priv::install_network_plugin(wxCommandEvent &event)
@@ -15830,10 +16203,7 @@ void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn, bool us
         show_error(this, ex.what(), false);
         return;
     }
-    default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
-    if (use_3mf) {
-        default_output_file.replace_extension("3mf");
-    }
+    default_output_file = prepare_upload_filename_for_dialog(std::move(default_output_file));
 
     // Repetier specific: Query the server for the list of file groups.
     wxArrayString groups;
@@ -16144,6 +16514,78 @@ void Plater::on_filament_count_change(size_t num_filaments)
     }
 }
 
+#ifdef ENABLE_FULLSPECTRUM
+void Plater::on_filaments_change(size_t num_filaments)
+{
+    // Extended version: handles mixed filament remap before UI refresh
+    update_filament_colors_in_full_config();
+
+    const size_t old_num_filaments = sidebar().combos_filament().size();
+    const bool auto_generate_before = MixedFilamentManager::auto_generate_enabled();
+    const bool allow_auto_gradients = p->confirm_auto_generated_gradients(this, num_filaments);
+
+    PresetBundle *preset_bundle = wxGetApp().preset_bundle;
+    if (preset_bundle != nullptr && auto_generate_before && !allow_auto_gradients)
+        preset_bundle->update_multi_material_filament_presets(size_t(-1), old_num_filaments);
+
+    // Consume remap before sidebar refresh, which may trigger config sync
+    // paths that regenerate mixed filaments and clear this remap buffer.
+    std::vector<unsigned int> id_remap;
+    if (preset_bundle != nullptr)
+        id_remap = preset_bundle->consume_last_filament_id_remap();
+
+    size_t total_filaments = num_filaments;
+    if (preset_bundle != nullptr)
+        total_filaments = preset_bundle->mixed_filaments.total_filaments(num_filaments);
+
+    EnforcerBlockerStateMap state_map;
+    for (size_t i = 0; i < state_map.size(); ++i)
+        state_map[i] = EnforcerBlockerType(i);
+
+    bool have_explicit_remap = false;
+    bool should_remap_states = false;
+    if (!id_remap.empty()) {
+        have_explicit_remap = true;
+        should_remap_states = true;
+        for (size_t i = 1; i < state_map.size(); ++i) {
+            const unsigned int mapped = i < id_remap.size() ? id_remap[i] : 0;
+            if (mapped == 0 || mapped >= state_map.size() || mapped > total_filaments)
+                state_map[i] = EnforcerBlockerType::NONE;
+            else
+                state_map[i] = EnforcerBlockerType(mapped);
+        }
+    }
+
+    BOOST_LOG_TRIVIAL(warning) << "MF_REMAP on_filaments_change"
+                            << " old_physical=" << old_num_filaments
+                            << " new_physical=" << num_filaments
+                            << " total_filaments=" << total_filaments
+                            << " id_remap_size=" << id_remap.size()
+                            << " explicit_remap=" << (have_explicit_remap ? 1 : 0)
+                            << " should_remap_states=" << (should_remap_states ? 1 : 0);
+
+    for (ModelObject* mo : wxGetApp().model().objects) {
+        for (ModelVolume* mv : mo->volumes) {
+            if (should_remap_states)
+                mv->remap_extruder_ids(total_filaments, state_map);
+            else
+                mv->update_extruder_count(total_filaments);
+        }
+    }
+
+    // Keep UI refresh after model remap
+    sidebar().on_filament_count_change(num_filaments);
+    sidebar().obj_list()->update_objects_list_filament_column(num_filaments);
+
+    Slic3r::GUI::PartPlateList &plate_list = get_partplate_list();
+    plate_list.set_filament_count(num_filaments);
+    for (int i = 0; i < plate_list.get_plate_count(); ++i) {
+        PartPlate* part_plate = plate_list.get_plate(i);
+        part_plate->update_first_layer_print_sequence(num_filaments);
+    }
+}
+#endif // ENABLE_FULLSPECTRUM
+
 void Plater::on_filaments_delete(size_t num_filaments, size_t filament_id, int replace_filament_id)
 {
     // only update elements in plater
@@ -16158,17 +16600,61 @@ void Plater::on_filaments_delete(size_t num_filaments, size_t filament_id, int r
     }*/
 
     // update mmu info
+#ifdef ENABLE_FULLSPECTRUM
+    PresetBundle *preset_bundle = wxGetApp().preset_bundle;
+
+    size_t total_filaments = num_filaments;
+    if (preset_bundle != nullptr) {
+        const size_t current_num_physical = preset_bundle->filament_presets.size();
+        total_filaments = preset_bundle->mixed_filaments.total_filaments(current_num_physical);
+    }
+
+    EnforcerBlockerStateMap state_map;
+    for (size_t i = 0; i < state_map.size(); ++i)
+        state_map[i] = EnforcerBlockerType(i);
+
+    const bool can_use_remap = replace_filament_id < 0;
+    std::vector<unsigned int> id_remap;
+    if (preset_bundle != nullptr)
+        id_remap = preset_bundle->consume_last_filament_id_remap();
+    if (can_use_remap && !id_remap.empty()) {
+        for (size_t i = 1; i < state_map.size(); ++i) {
+            const unsigned int mapped = i < id_remap.size() ? id_remap[i] : 0;
+            if (mapped == 0 || mapped >= state_map.size() || mapped > total_filaments)
+                state_map[i] = EnforcerBlockerType::NONE;
+            else
+                state_map[i] = EnforcerBlockerType(mapped);
+        }
+    }
+
+    for (ModelObject *mo : wxGetApp().model().objects) {
+        for (ModelVolume *mv : mo->volumes) {
+            if (can_use_remap && !id_remap.empty()) {
+                mv->remap_extruder_ids(total_filaments, state_map);
+            } else {
+                mv->update_extruder_count_when_delete_filament(total_filaments, filament_id + 1,
+                                                               replace_filament_id + 1); // this function is 1 base
+            }
+        }
+    }
+#else
     for (ModelObject *mo : wxGetApp().model().objects) {
         for (ModelVolume *mv : mo->volumes) {
             mv->update_extruder_count_when_delete_filament(num_filaments, filament_id + 1, replace_filament_id + 1);  // this function is 1 base
         }
     }
+#endif // ENABLE_FULLSPECTRUM
 
     // update UI
     sidebar().on_filaments_delete(filament_id);
 
-    // update global support filament
+    // update global feature filament selections
+#ifdef ENABLE_FULLSPECTRUM
+    static const char *keys[] = {"wall_filament", "sparse_infill_filament", "solid_infill_filament",
+                                 "support_filament", "support_interface_filament"};
+#else
     static const char *keys[] = {"support_filament", "support_interface_filament"};
+#endif // ENABLE_FULLSPECTRUM
     for (auto key : keys)
         if (p->config->has(key)) {
             if(p->config->opt_int(key) == filament_id + 1)
@@ -16342,6 +16828,9 @@ void Plater::on_config_change(const DynamicPrintConfig &config)
         }
         // Orca: update when *_filament changed
         else if (opt_key == "support_interface_filament" || opt_key == "support_filament" || opt_key == "wall_filament" ||
+                 opt_key == "enable_infill_filament_override" ||
+                 opt_key == "infill_filament_use_base_first_layers" ||
+                 opt_key == "infill_filament_use_base_last_layers" ||
                  opt_key == "sparse_infill_filament" || opt_key == "solid_infill_filament") {
             update_scheduled = true;
         }
@@ -16482,17 +16971,30 @@ void Plater::on_activate()
 }
 
 // Get vector of extruder colors considering filament color, if extruder color is undefined.
-std::vector<std::string> Plater::get_extruder_colors_from_plater_config(const GCodeProcessorResult* const result) const
+std::vector<std::string> Plater::get_extruder_colors_from_plater_config(const GCodeProcessorResult* const result, bool include_mixed) const
 {
     if (wxGetApp().is_gcode_viewer() && result != nullptr)
         return result->extruder_colors;
     else {
+        if (wxGetApp().preset_bundle == nullptr)
+            return {};
+
         const Slic3r::DynamicPrintConfig* config = &wxGetApp().preset_bundle->project_config;
         std::vector<std::string> filament_colors;
         if (!config->has("filament_colour")) // in case of a SLA print
             return filament_colors;
 
         filament_colors = (config->option<ConfigOptionStrings>("filament_colour"))->values;
+        const size_t num_physical = static_cast<size_t>(std::max(wxGetApp().filaments_cnt(), 0));
+        filament_colors.resize(num_physical, "#26A69A");
+
+        if (include_mixed) {
+            // Append display colours for enabled mixed (virtual) filaments.
+            const auto &mixed_mgr = wxGetApp().preset_bundle->mixed_filaments;
+            for (const auto &dc : mixed_mgr.display_colors())
+                filament_colors.push_back(dc);
+        }
+
         return filament_colors;
     }
 }

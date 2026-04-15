@@ -7,6 +7,9 @@
 #include "I18N.hpp"
 #include "libslic3r/AppConfig.hpp"
 #include "libslic3r/Format/DRC.hpp"
+#ifdef ENABLE_FULLSPECTRUM
+#include "libslic3r/MixedFilament.hpp"
+#endif
 #include <wx/language.h>
 #include "OG_CustomCtrl.hpp"
 #include "wx/graphics.h"
@@ -956,6 +959,18 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxString too
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " sync_user_preset: " << (sync ? "true" : "false");
         }
 
+        if (param == "auto_generate_gradients") {
+#ifdef ENABLE_FULLSPECTRUM
+            MixedFilamentManager::set_auto_generate_enabled(checkbox->GetValue());
+            if (wxGetApp().preset_bundle != nullptr && wxGetApp().plater() != nullptr) {
+                const size_t num_physical = wxGetApp().preset_bundle->filament_presets.size();
+                wxGetApp().plater()->set_auto_generated_gradient_decision(num_physical, checkbox->GetValue());
+                wxGetApp().preset_bundle->update_multi_material_filament_presets();
+                wxGetApp().plater()->on_filaments_change(num_physical);
+            }
+#endif
+        }
+
         #ifdef __WXMSW__
         if (param == "associate_3mf") {
              bool pbool = app_config->get("associate_3mf") == "true" ? true : false;
@@ -1501,6 +1516,12 @@ void PreferencesDialog::create_items()
         wxGetApp().app_config->set("save_preset_choise", "");
     });
     g_sizer->Add(item_save_presets);
+
+#ifdef ENABLE_FULLSPECTRUM
+    g_sizer->Add(create_item_title(_L("FullSpectrum")), 1, wxEXPAND);
+    auto item_auto_generate_gradients = create_item_checkbox(_L("Mixed filaments: Auto-generate gradients."), _L("If enabled, automatically creates gradient mixed filaments from physical filament pairs."), "auto_generate_gradients");
+    g_sizer->Add(item_auto_generate_gradients);
+#endif
 
     auto item_restore_hide_pop_ups = create_item_button(_L("Synchronizing printer preset"), _L("Clear"), L"", _L("Clear my choice for synchronizing printer preset after loading the file."), []() {
         wxGetApp().app_config->erase("app", "sync_after_load_file_show_flag");

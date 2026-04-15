@@ -30,6 +30,9 @@ public:
     struct ButtonState
     {
         ComboBox*   bitmap_combox{nullptr};
+#ifdef ENABLE_FULLSPECTRUM
+        Button *  keep_color_btn{nullptr};
+#endif
         bool      is_map{false};//int id{0};
     };
     typedef std::function<void()> LayoutChanggeCallback;
@@ -54,6 +57,13 @@ private:
     void deal_reset_btn();
     void deal_algo(char cluster_number,bool redraw_ui =false);
     void deal_default_strategy();
+#ifdef ENABLE_FULLSPECTRUM
+    void deal_keep_color_btn(int id);
+    int find_filament_selection_by_color(const wxColour &color) const;
+    int append_new_filament_option(const wxColour &color);
+    void update_keep_color_buttons();
+    static bool colors_are_equal(const wxColour &lhs, const wxColour &rhs);
+#endif
     void deal_thumbnail();
     void generate_thumbnail();
     void set_view_angle_type(int);
@@ -75,7 +85,7 @@ private:
     std::vector<wxButton*> m_extruder_icon_list;
     std::vector<wxButton*> m_color_cluster_icon_list;//need modeify
     std::vector<wxStaticText*> m_color_cluster_text_list;//need modeify
-    std::vector<wxGridSizer*> m_row_sizer_list;         // control show or not
+    std::vector<wxSizer*> m_row_sizer_list;         // control show or not
     std::vector<wxBoxSizer *> m_row_col_boxsizer_list;
     std::vector<ButtonState*> m_result_icon_list;
     int                       m_last_cluster_num{-1};
@@ -94,7 +104,6 @@ private:
     std::vector<int>      m_cluster_map_filaments;//show middle
     int                   m_max_filament_index = 0;
     std::vector<wxColour> m_cluster_colours;//from_algo and show left
-    bool                  m_can_add_filament{true};
     bool                  m_deal_thumbnail_flag{false};
     std::vector<wxColour> m_new_add_colors;
     std::vector<wxColour> m_new_add_final_colors;
