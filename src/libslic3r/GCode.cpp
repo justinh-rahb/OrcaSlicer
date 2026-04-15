@@ -1482,7 +1482,9 @@ static std::vector<Vec2d> get_path_of_change_filament(const Print& print)
     std::string WipeTowerIntegration::tool_change(GCode &gcodegen, int extruder_id, bool finish_layer, bool local_z_unplanned,
                                                   double local_z_nominal_layer_z)
 #else
-    std::string WipeTowerIntegration::tool_change(GCode &gcodegen, int extruder_id, bool finish_layer)
+    std::string WipeTowerIntegration::tool_change(GCode &gcodegen, int extruder_id, bool finish_layer,
+                                                  bool /*local_z_unplanned*/,
+                                                  double /*local_z_nominal_layer_z*/)
 #endif // ENABLE_FULLSPECTRUM
     {
         std::string gcode;
