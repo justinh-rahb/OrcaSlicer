@@ -861,7 +861,12 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		        const PrintRegionConfig &region_config = layerm.region().config();
 		        FlowRole extrusion_role = surface.is_top() ? frTopSolidInfill : (surface.is_solid() ? frSolidInfill : frInfill);
 		        bool     is_bridge 	    = layer.id() > 0 && surface.is_bridge();
+#ifdef ENABLE_FULLSPECTRUM
+                const unsigned int effective_extruder = layerm.extruder(extrusion_role);
+		        params.extruder 	 = effective_extruder;
+#else
 		        params.extruder 	 = layerm.region().extruder(extrusion_role);
+#endif
 		        params.pattern 		 = region_config.sparse_infill_pattern.value;
 		        params.density       = float(region_config.sparse_infill_density);
                 params.lateral_lattice_angle_1 = region_config.lateral_lattice_angle_1;
@@ -959,9 +964,9 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		        } else {
 					// Internal infill. Calculating infill line spacing independent of the current layer height and 1st layer status,
 					// so that internall infill will be aligned over all layers of the current region.
-		            params.spacing = layerm.region().flow(*layer.object(), frInfill, layer.object()->config().layer_height, false).spacing();
+		            params.spacing = layerm.flow(frInfill, layer.object()->config().layer_height).spacing();
 		            // Anchor a sparse infill to inner perimeters with the following anchor length:
-			        params.anchor_length = float(region_config.infill_anchor);
+		        	params.anchor_length = float(region_config.infill_anchor);
 					if (region_config.infill_anchor.percent)
 						params.anchor_length = float(params.anchor_length * 0.01 * params.spacing);
 					params.anchor_length_max = float(region_config.infill_anchor_max);
@@ -973,7 +978,11 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 				//get locked region param
 				if (params.pattern == ipLockedZag){
 					const PrintObject *object = layerm.layer()->object();
+#ifdef ENABLE_FULLSPECTRUM
+					auto nozzle_diameter = float(object->print()->config().nozzle_diameter.get_at(effective_extruder - 1));
+#else
 					auto nozzle_diameter = float(object->print()->config().nozzle_diameter.get_at(layerm.region().extruder(extrusion_role) - 1));
+#endif
 					Flow skin_flow = params.bridge ? params.flow : Flow::new_from_config_width(extrusion_role, region_config.skin_infill_line_width, nozzle_diameter, float((surface.thickness == -1) ? layer.height : surface.thickness));
 					//add skin flow
 					append_flow_param(lock_param.skin_flow_params, skin_flow, surface.expolygon);
@@ -1102,7 +1111,11 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 	        	}
 	        if (internal_solid_fill == nullptr) {
 	        	// Produce another solid fill.
+#ifdef ENABLE_FULLSPECTRUM
+		        params.extruder 	 = layerm.extruder(frSolidInfill);
+#else
 		        params.extruder 	 = layerm.region().extruder(frSolidInfill);
+#endif
                 const auto top_pattern = layerm.region().config().top_surface_pattern;
                 if(top_pattern == ipMonotonic || top_pattern == ipMonotonicLine)
                     params.pattern = top_pattern;
