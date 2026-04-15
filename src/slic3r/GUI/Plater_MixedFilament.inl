@@ -222,6 +222,26 @@ bool color_match_raw_weights_within_range(const std::vector<double> &weights, in
     return active_components >= 2;
 }
 
+} // end anonymous namespace (temporarily) for MixedColorMatchRecipeResult
+
+#ifndef MIXED_COLOR_MATCH_RECIPE_RESULT_DEFINED
+struct MixedColorMatchRecipeResult
+{
+    bool         cancelled     = false;
+    bool         valid         = false;
+    unsigned int component_a   = 1;
+    unsigned int component_b   = 2;
+    int          mix_b_percent = 50;
+    std::string  manual_pattern;
+    std::string  gradient_component_ids;
+    std::string  gradient_component_weights;
+    wxColour     preview_color = wxColour("#26A69A");
+    double       delta_e       = std::numeric_limits<double>::infinity();
+};
+#endif
+
+namespace { // reopen anonymous namespace
+
 MixedColorMatchRecipeResult build_pair_color_match_candidate(const std::vector<wxColour> &palette,
                                                              unsigned int                  component_a,
                                                              unsigned int                  component_b,

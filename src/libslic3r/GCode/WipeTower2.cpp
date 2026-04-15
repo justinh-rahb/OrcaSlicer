@@ -1638,7 +1638,7 @@ WipeTower::ToolChangeResult WipeTower2::local_z_tool_change(size_t new_tool,
 {
     const size_t old_tool = m_current_tool;
 
-    WipeTowerWriter2 writer(m_layer_height, m_perimeter_width, m_gcode_flavor, m_filpar, m_enable_arc_fitting, m_printer_model);
+    WipeTowerWriter2 writer(m_layer_height, m_perimeter_width, m_gcode_flavor, m_filpar, m_enable_arc_fitting);
     writer.set_extrusion_flow(m_extrusion_flow)
         .set_z(m_z_pos)
         .set_initial_tool(m_current_tool)
@@ -1666,7 +1666,7 @@ WipeTower::ToolChangeResult WipeTower2::local_z_tool_change(size_t new_tool,
     toolchange_Change(writer, new_tool, m_filpar[new_tool].material);
     toolchange_Load(writer, cleaning_box);
     writer.travel(writer.x(), writer.y() - m_perimeter_width);
-    toolchange_Wipe(writer, cleaning_box, wipe_volume);
+    toolchange_Wipe(writer, cleaning_box, wipe_volume, false);
     writer.append(";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Wipe_Tower_End) + "\n");
 
     ++m_num_tool_changes;

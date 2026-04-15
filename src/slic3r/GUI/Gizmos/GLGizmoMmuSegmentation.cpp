@@ -33,7 +33,7 @@ static inline void show_notification_extruders_limit_exceeded()
 
 void GLGizmoMmuSegmentation::on_opening()
 {
-    if (get_extruders_colors().size() > GLGizmoMmuSegmentation::EXTRUDERS_LIMIT)
+    if (wxGetApp().plater()->get_extruders_colors().size() > GLGizmoMmuSegmentation::EXTRUDERS_LIMIT)
         show_notification_extruders_limit_exceeded();
 }
 
@@ -1479,6 +1479,7 @@ void GLGizmoMmuSegmentation::render_filament_remap_ui(float window_width, float 
         
         displayed_count++;
     }
+#endif // ENABLE_FULLSPECTRUM
 }
 
 void GLGizmoMmuSegmentation::remap_filament_assignments()

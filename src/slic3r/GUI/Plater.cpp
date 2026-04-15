@@ -1664,6 +1664,26 @@ void Sidebar::update_sync_ams_btn_enable(wxUpdateUIEvent &e)
      }
  }
 
+#ifdef ENABLE_FULLSPECTRUM
+#define MIXED_COLOR_MATCH_RECIPE_RESULT_DEFINED
+struct MixedColorMatchRecipeResult
+{
+    bool         cancelled     = false;
+    bool         valid         = false;
+    unsigned int component_a   = 1;
+    unsigned int component_b   = 2;
+    int          mix_b_percent = 50;
+    std::string  manual_pattern;
+    std::string  gradient_component_ids;
+    std::string  gradient_component_weights;
+    wxColour     preview_color = wxColour("#26A69A");
+    double       delta_e       = std::numeric_limits<double>::infinity();
+};
+MixedColorMatchRecipeResult prompt_best_color_match_recipe(wxWindow *parent,
+                                                           const std::vector<std::string> &physical_colors,
+                                                           const wxColour &initial_color);
+#endif
+
 Sidebar::Sidebar(Plater *parent)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(39 * wxGetApp().em_unit(), -1)), p(new priv(parent))
 {
@@ -16185,6 +16205,37 @@ void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn, bool us
         return;
 
     upload_job.upload_data.use_3mf = use_3mf;
+
+    auto prepare_upload_filename_for_dialog = [this, use_3mf](fs::path output_file) {
+        output_file = fs::path(Slic3r::fold_utf8_to_ascii(output_file.string()));
+        if (use_3mf)
+            output_file.replace_extension("3mf");
+
+        PartPlate *current_plate = this->get_partplate_list().get_curr_plate();
+        if (current_plate != nullptr) {
+            const Print *current_print = current_plate->fff_print();
+            if (current_print != nullptr && !current_print->print_statistics().estimated_normal_print_time.empty())
+                return fs::path(current_print->print_statistics().finalize_output_path(output_file.string()));
+        }
+
+        if (current_plate != nullptr && current_plate->is_slice_result_valid() && current_plate->get_slice_result() != nullptr) {
+            const auto &estimated_stats = current_plate->get_slice_result()->print_statistics;
+            const float normal_time = estimated_stats.modes[static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Normal)].time;
+            if (normal_time > 0.0f) {
+                std::string filename = output_file.string();
+                const std::string normal_time_str = short_time(get_time_dhms(normal_time));
+                boost::replace_all(filename, "{print_time}", normal_time_str);
+                boost::replace_all(filename, "{normal_print_time}", normal_time_str);
+
+                const float silent_time = estimated_stats.modes[static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Stealth)].time;
+                if (silent_time > 0.0f)
+                    boost::replace_all(filename, "{silent_print_time}", short_time(get_time_dhms(silent_time)));
+
+                output_file = fs::path(filename);
+            }
+        }
+        return output_file;
+    };
 
     // Obtain default output path
     fs::path default_output_file;

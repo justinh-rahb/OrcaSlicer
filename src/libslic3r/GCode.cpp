@@ -1528,10 +1528,10 @@ static std::vector<Vec2d> get_path_of_change_filament(const Print& print)
         }
 
         const float layer_height = m_tool_changes[m_layer_idx].front().layer_height;
-        if (gcodegen.m_curr_print != nullptr && gcodegen.writer().extruder() != nullptr) {
+        if (gcodegen.m_curr_print != nullptr && gcodegen.writer().filament() != nullptr) {
             const Print&       print        = *gcodegen.m_curr_print;
             const PrintConfig& print_config = print.config();
-            const size_t       current_tool = gcodegen.writer().extruder()->id();
+            const size_t       current_tool = gcodegen.writer().filament()->id();
             std::vector<std::vector<float>> wipe_volumes = WipeTower2::extract_wipe_volumes(print_config);
 
             WipeTower2 local_z_wipe_tower(print_config,
@@ -1605,11 +1605,11 @@ static std::vector<Vec2d> get_path_of_change_filament(const Print& print)
 
         gcode += gcodegen.writer().unlift();
 
-        if (gcodegen.writer().extruder() != nullptr) {
-            auto type = ZHopType(gcodegen.m_config.z_hop_types.get_at(gcodegen.m_writer.extruder()->id()));
+        if (gcodegen.writer().filament() != nullptr) {
+            auto type = ZHopType(gcodegen.m_config.z_hop_types.get_at(gcodegen.m_writer.filament()->id()));
             if (type == ZHopType::zhtAuto)
                 type = ZHopType::zhtSpiral;
-            if (gcodegen.m_config.z_hop_when_prime.get_at(gcodegen.m_writer.extruder()->id()))
+            if (gcodegen.m_config.z_hop.get_at(gcodegen.m_writer.filament()->id()) > 0.)
                 gcode += gcodegen.retract(false, false, gcodegen.to_lift_type(type));
         }
 
@@ -1661,7 +1661,7 @@ static std::vector<Vec2d> get_path_of_change_filament(const Print& print)
         }
 
         if (!is_approx(tower_z, current_z)) {
-            const Extruder *active_extruder = gcodegen.writer().extruder();
+            const Extruder *active_extruder = gcodegen.writer().filament();
             const bool can_wipe = active_extruder != nullptr &&
                                   gcodegen.config().wipe.get_at(active_extruder->id()) &&
                                   gcodegen.m_wipe.has_path() &&

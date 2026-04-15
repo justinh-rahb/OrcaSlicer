@@ -556,6 +556,10 @@ private:
 
     OozePrevention                      m_ooze_prevention;
     Wipe                                m_wipe;
+#ifdef ENABLE_FULLSPECTRUM
+    float                               m_next_wipe_x = 0.f;
+    float                               m_next_wipe_y = 0.f;
+#endif
     AvoidCrossingPerimeters             m_avoid_crossing_perimeters;
     RetractWhenCrossingPerimeters       m_retract_when_crossing_perimeters;
     TimelapsePosPicker                  m_timelapse_pos_picker;

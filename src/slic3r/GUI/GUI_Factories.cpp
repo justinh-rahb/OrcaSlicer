@@ -998,6 +998,7 @@ void MenuFactory::append_menu_item_change_extruder(wxMenu* menu)
         return;
 
     std::vector<wxBitmap*> icons = get_extruder_color_icons(true);
+    const int filaments_cnt = filaments_count();
     wxMenu* extruder_selection_menu = new wxMenu();
     const wxString& name = sels.Count() == 1 ? names[0] : names[1];
 
@@ -1010,6 +1011,7 @@ void MenuFactory::append_menu_item_change_extruder(wxMenu* menu)
 
     for (int i = 0; i <= filaments_cnt; i++)
     {
+        const int actual_filament_id = i;
         bool is_active_extruder = i == initial_extruder;
         int icon_idx = i == 0 ? 0 : i - 1;
 
@@ -2164,6 +2166,7 @@ void MenuFactory::append_menu_item_change_filament(wxMenu* menu)
     }
 
     std::vector<wxBitmap*> icons = get_extruder_color_icons(true);
+    const int filaments_cnt = filaments_count();
     if (icons.size() < ordered_filament_ids.size()) {
         BOOST_LOG_TRIVIAL(warning) << boost::format("Warning: icons size %1%, filaments_cnt=%2%") % icons.size() % ordered_filament_ids.size();
         if (icons.size() <= 1)
