@@ -5,7 +5,10 @@ add_executable(${_TEST_NAME}_tests
   printer_parts.hpp
 )
 
-target_link_libraries(${_TEST_NAME}_tests test_common libnest2d Catch2::Catch2WithMain)
+target_link_libraries(${_TEST_NAME}_tests test_common libnest2d Catch2::Catch2WithMain OpenSSL::Crypto)
+if (WIN32)
+    target_link_libraries(${_TEST_NAME}_tests bcrypt.lib)
+endif()
 set_property(TARGET ${_TEST_NAME}_tests PROPERTY FOLDER "tests")
 
 if (WIN32)
