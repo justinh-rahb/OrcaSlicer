@@ -79,7 +79,11 @@ static size_t total_filaments_count(size_t physical_count)
     if (wxGetApp().preset_bundle == nullptr)
         return physical_count;
 
+#ifdef ENABLE_FULLSPECTRUM
     return wxGetApp().preset_bundle->mixed_filaments.total_filaments(physical_count);
+#else
+    return physical_count;
+#endif
 }
 
 static int filaments_count()

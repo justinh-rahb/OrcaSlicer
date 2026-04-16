@@ -1639,7 +1639,11 @@ std::vector<int> PartPlate::get_extruders(bool conside_custom_gcode) const
         int nums_extruders = 0;
         if (const ConfigOptionStrings *color_option = dynamic_cast<const ConfigOptionStrings *>(wxGetApp().preset_bundle->project_config.option("filament_colour"))) {
             nums_extruders = color_option->values.size();
+#ifdef ENABLE_FULLSPECTRUM
             const size_t total_filaments = wxGetApp().preset_bundle->mixed_filaments.total_filaments(size_t(nums_extruders));
+#else
+            const size_t total_filaments = size_t(nums_extruders);
+#endif
 			if (m_model->plates_custom_gcodes.find(m_plate_index) != m_model->plates_custom_gcodes.end()) {
 				for (auto item : m_model->plates_custom_gcodes.at(m_plate_index).gcodes) {
 					if (item.type == CustomGCode::Type::ToolChange && item.extruder <= int(total_filaments))
@@ -1757,8 +1761,10 @@ std::vector<int> PartPlate::get_extruders_under_cli(bool conside_custom_gcode, D
         if (const ConfigOptionStrings *color_option = dynamic_cast<const ConfigOptionStrings *>(full_config.option("filament_colour"))) {
             nums_extruders = color_option->values.size();
             size_t total_filaments = size_t(nums_extruders);
+#ifdef ENABLE_FULLSPECTRUM
             if (wxGetApp().preset_bundle != nullptr)
                 total_filaments = wxGetApp().preset_bundle->mixed_filaments.total_filaments(total_filaments);
+#endif
             if (m_model->plates_custom_gcodes.find(m_plate_index) != m_model->plates_custom_gcodes.end()) {
                 for (auto item : m_model->plates_custom_gcodes.at(m_plate_index).gcodes) {
                     if (item.type == CustomGCode::Type::ToolChange && item.extruder <= int(total_filaments))
@@ -1812,7 +1818,11 @@ std::vector<int> PartPlate::get_extruders_without_support(bool conside_custom_gc
 		int nums_extruders = 0;
 		if (const ConfigOptionStrings* color_option = dynamic_cast<const ConfigOptionStrings*>(wxGetApp().preset_bundle->project_config.option("filament_colour"))) {
 			nums_extruders = color_option->values.size();
+#ifdef ENABLE_FULLSPECTRUM
             const size_t total_filaments = wxGetApp().preset_bundle->mixed_filaments.total_filaments(size_t(nums_extruders));
+#else
+            const size_t total_filaments = size_t(nums_extruders);
+#endif
 			if (m_model->plates_custom_gcodes.find(m_plate_index) != m_model->plates_custom_gcodes.end()) {
 				for (auto item : m_model->plates_custom_gcodes.at(m_plate_index).gcodes) {
 					if (item.type == CustomGCode::Type::ToolChange && item.extruder <= int(total_filaments))

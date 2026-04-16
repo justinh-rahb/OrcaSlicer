@@ -46,15 +46,28 @@ static int filaments_count()
     if (wxGetApp().preset_bundle == nullptr)
         return 0;
     const int physical = physical_filaments_count();
+#ifdef ENABLE_FULLSPECTRUM
     const auto &mixed_mgr = wxGetApp().preset_bundle->mixed_filaments;
     return static_cast<int>(mixed_mgr.total_filaments(size_t(physical)));
+#else
+    return physical;
+#endif
 }
 
 static std::vector<unsigned int> ui_ordered_filament_ids()
 {
     if (wxGetApp().plater() == nullptr)
         return {};
+#ifdef ENABLE_FULLSPECTRUM
     return wxGetApp().plater()->sidebar().get_ui_ordered_filament_ids();
+#else
+    std::vector<unsigned int> ids;
+    const int cnt = physical_filaments_count();
+    ids.reserve(size_t(cnt));
+    for (int i = 1; i <= cnt; ++i)
+        ids.push_back(unsigned(i));
+    return ids;
+#endif
 }
 
 static wxString filament_menu_item_name(const int filament_id_1based, const int display_filament_id_1based)
@@ -77,7 +90,11 @@ static wxString filament_menu_item_name(const int filament_id_1based, const int 
         return wxString::Format(_L("Filament %d"), filament_id_1based);
     }
 
+#ifdef ENABLE_FULLSPECTRUM
     return wxString::Format(_L("Mixed Filament %d"), display_filament_id_1based);
+#else
+    return wxString::Format(_L("Filament %d"), filament_id_1based);
+#endif
 }
 
 static bool is_improper_category(const std::string& category, const int filaments_cnt, const bool is_object_settings = true)

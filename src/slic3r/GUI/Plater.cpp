@@ -4601,13 +4601,17 @@ struct Plater::priv
     static const std::regex pattern_prusa;
 
     bool m_is_dark = false;
+#ifdef ENABLE_FULLSPECTRUM
     size_t m_last_auto_gradient_prompt_physical_count = 0;
     bool   m_last_auto_gradient_prompt_accepted = false;
+#endif
 
     priv(Plater *q, MainFrame *main_frame);
     ~priv();
+#ifdef ENABLE_FULLSPECTRUM
     bool confirm_auto_generated_gradients(wxWindow *parent, size_t num_physical);
     void set_auto_generated_gradient_decision(size_t num_physical, bool create_auto_gradients);
+#endif
 
 
     bool need_update() const { return m_need_update; }
@@ -6246,6 +6250,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             if (current_project_empty) {
                                 static const t_config_option_keys imported_project_option_keys = {
                                     "filament_colour",
+#ifdef ENABLE_FULLSPECTRUM
                                     "mixed_filament_definitions",
                                     "mixed_filament_gradient_mode",
                                     "mixed_filament_height_lower_bound",
@@ -6255,34 +6260,49 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     "mixed_filament_pointillism_line_gap",
                                     "mixed_filament_component_bias_enabled",
                                     "mixed_filament_surface_indentation"
+#endif
                                 };
                                 preset_bundle->project_config.apply_only(config_loaded, imported_project_option_keys, true);
                                 if (current_num_filaments != desired_physical_filaments) {
+#ifdef ENABLE_FULLSPECTRUM
                                     q->confirm_auto_generated_gradients(desired_physical_filaments);
+#endif
                                     preset_bundle->set_num_filaments(unsigned(desired_physical_filaments));
                                 } else
                                     preset_bundle->update_multi_material_filament_presets();
                                 BOOST_LOG_TRIVIAL(info) << "3MF geometry import applied imported project config"
                                                         << " current_num_filaments=" << current_num_filaments
-                                                        << " desired_physical_filaments=" << desired_physical_filaments
-                                                        << " mixed_enabled=" << preset_bundle->mixed_filaments.enabled_count();
+                                                        << " desired_physical_filaments=" << desired_physical_filaments;
+#ifdef ENABLE_FULLSPECTRUM
+                                BOOST_LOG_TRIVIAL(info) << " mixed_enabled=" << preset_bundle->mixed_filaments.enabled_count();
                                 wxGetApp().plater()->on_filaments_change(desired_physical_filaments);
+#else
+                                wxGetApp().plater()->on_filament_count_change(desired_physical_filaments);
+#endif
                             } else if (current_num_filaments < desired_physical_filaments) {
                                 std::vector<std::string> new_colors;
                                 if (imported_filament_colors.size() > current_num_filaments) {
                                     new_colors.assign(imported_filament_colors.begin() + current_num_filaments,
                                                       imported_filament_colors.begin() + desired_physical_filaments);
                                 }
+#ifdef ENABLE_FULLSPECTRUM
                                 q->confirm_auto_generated_gradients(desired_physical_filaments);
+#endif
                                 preset_bundle->set_num_filaments(unsigned(desired_physical_filaments), new_colors);
+#ifdef ENABLE_FULLSPECTRUM
                                 wxGetApp().plater()->on_filaments_change(desired_physical_filaments);
+#else
+                                wxGetApp().plater()->on_filament_count_change(desired_physical_filaments);
+#endif
                             }
                         }
 
                         int filament_size = sidebar->combos_filament().size();
                         while (filament_size < MAXIMUM_EXTRUDER_NUMBER && filament_size < size) {
                             int         filament_count = filament_size + 1;
+#ifdef ENABLE_FULLSPECTRUM
                             wxGetApp().plater()->confirm_auto_generated_gradients(filament_count);
+#endif
                             wxColour    new_col        = Plater::get_next_color_for_filament();
                             std::string new_color      = new_col.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
                             wxGetApp().preset_bundle->set_num_filaments(filament_count, new_color);
@@ -10463,6 +10483,7 @@ void Plater::priv::on_repair_model(wxCommandEvent &event)
     wxGetApp().obj_list()->fix_through_netfabb();
 }
 
+#ifdef ENABLE_FULLSPECTRUM
 bool Plater::priv::confirm_auto_generated_gradients(wxWindow *parent, size_t num_physical)
 {
     auto *app_config = wxGetApp().app_config;
@@ -10532,6 +10553,7 @@ void Plater::set_auto_generated_gradient_decision(size_t num_physical, bool crea
     else
         MixedFilamentManager::set_auto_generate_enabled(create_auto_gradients);
 }
+#endif // ENABLE_FULLSPECTRUM
 
 void Plater::priv::on_filament_color_changed(wxCommandEvent &event)
 {
@@ -17040,10 +17062,12 @@ std::vector<std::string> Plater::get_extruder_colors_from_plater_config(const GC
         filament_colors.resize(num_physical, "#26A69A");
 
         if (include_mixed) {
+#ifdef ENABLE_FULLSPECTRUM
             // Append display colours for enabled mixed (virtual) filaments.
             const auto &mixed_mgr = wxGetApp().preset_bundle->mixed_filaments;
             for (const auto &dc : mixed_mgr.display_colors())
                 filament_colors.push_back(dc);
+#endif
         }
 
         return filament_colors;

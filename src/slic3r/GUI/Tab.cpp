@@ -1984,8 +1984,10 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         m_active_page->update_visibility(m_mode, true);
     m_page_view->GetParent()->Layout();
 
+#ifdef ENABLE_FULLSPECTRUM
     if (refresh_mixed_filament_panel && wxGetApp().plater() != nullptr)
         wxGetApp().sidebar().update_mixed_filament_panel(false);
+#endif
 }
 
 void Tab::show_timelapse_warning_dialog() {

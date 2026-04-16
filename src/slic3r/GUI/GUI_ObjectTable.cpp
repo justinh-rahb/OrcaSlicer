@@ -2830,6 +2830,7 @@ int ObjectTablePanel::init_filaments_and_colors()
             continue;
         }
 
+#ifdef ENABLE_FULLSPECTRUM
         size_t mixed_offset = 0;
         for (const MixedFilament &mf : wxGetApp().preset_bundle->mixed_filaments.mixed_filaments()) {
             if (!mf.enabled || mf.deleted)
@@ -2844,6 +2845,7 @@ int ObjectTablePanel::init_filaments_and_colors()
                                                    unsigned(mf.component_a), unsigned(mf.component_b));
             break;
         }
+#endif
 
         if (m_filaments_name[i].empty())
             m_filaments_name[i] = wxString::Format("%d: Filament %d", i + 1, i + 1);

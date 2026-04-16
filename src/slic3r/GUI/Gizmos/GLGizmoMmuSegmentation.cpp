@@ -873,6 +873,7 @@ void GLGizmoMmuSegmentation::update_model_object()
     }
 
     if (updated) {
+#ifdef ENABLE_FULLSPECTRUM
         const size_t num_physical = static_cast<size_t>(std::max(wxGetApp().filaments_cnt(), 0));
         size_t       num_total    = num_physical;
         if (wxGetApp().preset_bundle != nullptr)
@@ -895,6 +896,7 @@ void GLGizmoMmuSegmentation::update_model_object()
                                        << " physical_filaments=" << num_physical
                                        << " total_filaments=" << num_total;
         }
+#endif // ENABLE_FULLSPECTRUM
 
         const ModelObjectPtrs &mos = wxGetApp().model().objects;
         size_t obj_idx = std::find(mos.begin(), mos.end(), mo) - mos.begin();

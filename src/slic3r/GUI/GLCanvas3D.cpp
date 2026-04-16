@@ -184,6 +184,15 @@ static std::vector<unsigned int> get_ui_ordered_filament_ids(Plater *plater, siz
     }
     return sanitized_ids;
 }
+#else
+static std::vector<unsigned int> get_ui_ordered_filament_ids(Plater * /*plater*/, size_t total_filaments)
+{
+    std::vector<unsigned int> ids;
+    ids.reserve(total_filaments);
+    for (unsigned int i = 1; i <= total_filaments; ++i)
+        ids.emplace_back(i);
+    return ids;
+}
 #endif
 
 GLCanvas3D::LayersEditing::~LayersEditing()
