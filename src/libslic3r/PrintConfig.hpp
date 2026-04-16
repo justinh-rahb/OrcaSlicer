@@ -1037,6 +1037,14 @@ PRINT_CONFIG_CLASS_DEFINE(
 )
 
 // This object is mapped to Perl as Slic3r::Config::PrintRegion.
+#ifdef ENABLE_FULLSPECTRUM
+#define FULLSPECTRUM_REGION_OPTS \
+    ((ConfigOptionBool,                 enable_infill_filament_override)) \
+    ((ConfigOptionInt,                  infill_filament_use_base_first_layers)) \
+    ((ConfigOptionInt,                  infill_filament_use_base_last_layers))
+#else
+#define FULLSPECTRUM_REGION_OPTS
+#endif
 PRINT_CONFIG_CLASS_DEFINE(
     PrintRegionConfig,
 
@@ -1081,11 +1089,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionInt,                  fuzzy_skin_octaves))
     ((ConfigOptionFloat,                fuzzy_skin_persistence))
     ((ConfigOptionFloat,                gap_infill_speed))
-#ifdef ENABLE_FULLSPECTRUM
-    ((ConfigOptionBool,                 enable_infill_filament_override))
-    ((ConfigOptionInt,                  infill_filament_use_base_first_layers))
-    ((ConfigOptionInt,                  infill_filament_use_base_last_layers))
-#endif
+    FULLSPECTRUM_REGION_OPTS
     ((ConfigOptionInt,                  sparse_infill_filament))
     ((ConfigOptionFloatOrPercent,       sparse_infill_line_width))
     ((ConfigOptionPercent,              infill_wall_overlap))
@@ -1410,6 +1414,29 @@ PRINT_CONFIG_CLASS_DEFINE(
 )
 
 // This object is mapped to Perl as Slic3r::Config::Print.
+#ifdef ENABLE_FULLSPECTRUM
+#define FULLSPECTRUM_PRINT_OPTS \
+    ((ConfigOptionFloat,              mixed_color_layer_height_a)) \
+    ((ConfigOptionFloat,              mixed_color_layer_height_b)) \
+    ((ConfigOptionBool,               mixed_filament_gradient_mode)) \
+    ((ConfigOptionFloat,              mixed_filament_height_lower_bound)) \
+    ((ConfigOptionFloat,              mixed_filament_height_upper_bound)) \
+    ((ConfigOptionBool,               mixed_filament_advanced_dithering)) \
+    ((ConfigOptionFloat,              mixed_filament_pointillism_pixel_size)) \
+    ((ConfigOptionFloat,              mixed_filament_pointillism_line_gap)) \
+    ((ConfigOptionBool,               mixed_filament_component_bias_enabled)) \
+    ((ConfigOptionFloat,              mixed_filament_surface_indentation)) \
+    ((ConfigOptionBool,               mixed_filament_region_collapse)) \
+    ((ConfigOptionString,             mixed_filament_definitions)) \
+    ((ConfigOptionFloat,              dithering_z_step_size)) \
+    ((ConfigOptionBool,               dithering_local_z_mode)) \
+    ((ConfigOptionBool,               dithering_step_painted_zones_only))
+#define FULLSPECTRUM_WIPE_TOWER_OPTS \
+    ((ConfigOptionFloat,              local_z_wipe_tower_purge_lines))
+#else
+#define FULLSPECTRUM_PRINT_OPTS
+#define FULLSPECTRUM_WIPE_TOWER_OPTS
+#endif
 PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     PrintConfig,
     (MachineEnvelopeConfig, GCodeConfig),
@@ -1483,23 +1510,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionBool,               ooze_prevention))
     ((ConfigOptionString,             filename_format))
     ((ConfigOptionStrings,            post_process))
-#ifdef ENABLE_FULLSPECTRUM
-    ((ConfigOptionFloat,              mixed_color_layer_height_a))
-    ((ConfigOptionFloat,              mixed_color_layer_height_b))
-    ((ConfigOptionBool,               mixed_filament_gradient_mode))
-    ((ConfigOptionFloat,              mixed_filament_height_lower_bound))
-    ((ConfigOptionFloat,              mixed_filament_height_upper_bound))
-    ((ConfigOptionBool,               mixed_filament_advanced_dithering))
-    ((ConfigOptionFloat,              mixed_filament_pointillism_pixel_size))
-    ((ConfigOptionFloat,              mixed_filament_pointillism_line_gap))
-    ((ConfigOptionBool,               mixed_filament_component_bias_enabled))
-    ((ConfigOptionFloat,              mixed_filament_surface_indentation))
-    ((ConfigOptionBool,               mixed_filament_region_collapse))
-    ((ConfigOptionString,             mixed_filament_definitions))
-    ((ConfigOptionFloat,              dithering_z_step_size))
-    ((ConfigOptionBool,               dithering_local_z_mode))
-    ((ConfigOptionBool,               dithering_step_painted_zones_only))
-#endif
+    FULLSPECTRUM_PRINT_OPTS
     ((ConfigOptionString,             printer_model))
     ((ConfigOptionFloat,              resolution))
     ((ConfigOptionFloats,             retraction_minimum_travel))
@@ -1542,9 +1553,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionBool,               enable_tower_interface_cooldown_during_tower))
     ((ConfigOptionFloat,              wipe_tower_bridging))
     ((ConfigOptionPercent,            wipe_tower_extra_flow))
-#ifdef ENABLE_FULLSPECTRUM
-    ((ConfigOptionFloat,              local_z_wipe_tower_purge_lines))
-#endif
+    FULLSPECTRUM_WIPE_TOWER_OPTS
     ((ConfigOptionFloats,             flush_volumes_matrix))
     ((ConfigOptionFloats,             flush_volumes_vector))
 
