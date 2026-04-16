@@ -1,14 +1,17 @@
 #include <catch2/catch_all.hpp>
 
 #include "libslic3r/ExtrusionEntity.hpp"
+
+using namespace Slic3r;
+
+#ifdef ENABLE_FULLSPECTRUM
+
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/Print.hpp"
 #include "libslic3r/GCode/ToolOrdering.hpp"
 
 #include <sstream>
 #include <vector>
-
-using namespace Slic3r;
 
 namespace {
 
@@ -187,10 +190,10 @@ TEST_CASE("Mixed filament component surface offsets round-trip and bias the seco
     REQUIRE(loaded.mixed_filaments().size() == 1);
 
     const MixedFilament &loaded_row = loaded.mixed_filaments().front();
-    CHECK(loaded_row.component_a_surface_offset == Approx(0.02f));
-    CHECK(loaded_row.component_b_surface_offset == Approx(-0.01f));
-    CHECK(loaded.component_surface_offset(3, 2, 0) == Approx(0.01f));
-    CHECK(loaded.component_surface_offset(3, 2, 1) == Approx(0.0f));
+    CHECK(loaded_row.component_a_surface_offset == Catch::Approx(0.02f));
+    CHECK(loaded_row.component_b_surface_offset == Catch::Approx(-0.01f));
+    CHECK(loaded.component_surface_offset(3, 2, 0) == Catch::Approx(0.01f));
+    CHECK(loaded.component_surface_offset(3, 2, 1) == Catch::Approx(0.0f));
 }
 
 TEST_CASE("Mixed filament apparent mix percent follows the signed bias target", "[MixedFilament]")
@@ -205,33 +208,33 @@ TEST_CASE("Mixed filament apparent mix percent follows the signed bias target", 
 TEST_CASE("Mixed filament bias helper maps signed bias to a one-sided safe offset pair", "[MixedFilament]")
 {
     const auto [offset_a, offset_b] = MixedFilamentManager::surface_offset_pair_from_signed_bias(0.06f, 0.4f);
-    CHECK(offset_a == Approx(0.0f));
-    CHECK(offset_b == Approx(0.06f));
+    CHECK(offset_a == Catch::Approx(0.0f));
+    CHECK(offset_b == Catch::Approx(0.06f));
 
-    CHECK(MixedFilamentManager::bias_ui_value_from_surface_offsets(offset_a, offset_b, 0.4f) == Approx(0.06f));
+    CHECK(MixedFilamentManager::bias_ui_value_from_surface_offsets(offset_a, offset_b, 0.4f) == Catch::Approx(0.06f));
 
-    CHECK(MixedFilamentManager::bias_ui_value_from_surface_offsets(0.02f, 0.0f, 0.4f) == Approx(-0.02f));
-    CHECK(MixedFilamentManager::bias_ui_value_from_surface_offsets(-0.02f, 0.0f, 0.4f) == Approx(0.02f));
+    CHECK(MixedFilamentManager::bias_ui_value_from_surface_offsets(0.02f, 0.0f, 0.4f) == Catch::Approx(-0.02f));
+    CHECK(MixedFilamentManager::bias_ui_value_from_surface_offsets(-0.02f, 0.0f, 0.4f) == Catch::Approx(0.02f));
 
     const auto [negative_a, negative_b] = MixedFilamentManager::surface_offset_pair_from_signed_bias(-0.06f, 0.4f);
-    CHECK(negative_a == Approx(0.06f));
-    CHECK(negative_b == Approx(0.0f));
+    CHECK(negative_a == Catch::Approx(0.06f));
+    CHECK(negative_b == Catch::Approx(0.0f));
 
     const auto [unclamped_a, unclamped_b] = MixedFilamentManager::surface_offset_pair_from_signed_bias(0.30f, 0.4f);
-    CHECK(unclamped_a == Approx(0.0f));
-    CHECK(unclamped_b == Approx(0.30f));
+    CHECK(unclamped_a == Catch::Approx(0.0f));
+    CHECK(unclamped_b == Catch::Approx(0.30f));
 
     const auto [unclamped_negative_a, unclamped_negative_b] = MixedFilamentManager::surface_offset_pair_from_signed_bias(-0.30f, 0.4f);
-    CHECK(unclamped_negative_a == Approx(0.30f));
-    CHECK(unclamped_negative_b == Approx(0.0f));
+    CHECK(unclamped_negative_a == Catch::Approx(0.30f));
+    CHECK(unclamped_negative_b == Catch::Approx(0.0f));
 
     const auto [clamped_a, clamped_b] = MixedFilamentManager::surface_offset_pair_from_signed_bias(0.40f, 0.4f);
-    CHECK(clamped_a == Approx(0.0f));
-    CHECK(clamped_b == Approx(0.35f));
+    CHECK(clamped_a == Catch::Approx(0.0f));
+    CHECK(clamped_b == Catch::Approx(0.35f));
 
     const auto [clamped_negative_a, clamped_negative_b] = MixedFilamentManager::surface_offset_pair_from_signed_bias(-0.40f, 0.4f);
-    CHECK(clamped_negative_a == Approx(0.35f));
-    CHECK(clamped_negative_b == Approx(0.0f));
+    CHECK(clamped_negative_a == Catch::Approx(0.35f));
+    CHECK(clamped_negative_b == Catch::Approx(0.0f));
 }
 
 TEST_CASE("Mixed filament component surface offsets follow the signed bias target across alternating layers", "[MixedFilament]")
@@ -253,20 +256,20 @@ TEST_CASE("Mixed filament component surface offsets follow the signed bias targe
         row.component_a_surface_offset = offset_a;
         row.component_b_surface_offset = offset_b;
 
-        CHECK(mgr.component_surface_offset(3, 2, 0) == Approx(0.0f));
-        CHECK(mgr.component_surface_offset(3, 2, 1) == Approx(0.05f));
-        CHECK(mgr.component_surface_offset(3, 2, 2) == Approx(0.0f));
-        CHECK(mgr.component_surface_offset(3, 2, 3) == Approx(0.05f));
+        CHECK(mgr.component_surface_offset(3, 2, 0) == Catch::Approx(0.0f));
+        CHECK(mgr.component_surface_offset(3, 2, 1) == Catch::Approx(0.05f));
+        CHECK(mgr.component_surface_offset(3, 2, 2) == Catch::Approx(0.0f));
+        CHECK(mgr.component_surface_offset(3, 2, 3) == Catch::Approx(0.05f));
     }
 
     {
         row.component_a_surface_offset = 0.05f;
         row.component_b_surface_offset = 0.0f;
 
-        CHECK(mgr.component_surface_offset(3, 2, 0) == Approx(0.05f));
-        CHECK(mgr.component_surface_offset(3, 2, 1) == Approx(0.0f));
-        CHECK(mgr.component_surface_offset(3, 2, 2) == Approx(0.05f));
-        CHECK(mgr.component_surface_offset(3, 2, 3) == Approx(0.0f));
+        CHECK(mgr.component_surface_offset(3, 2, 0) == Catch::Approx(0.05f));
+        CHECK(mgr.component_surface_offset(3, 2, 1) == Catch::Approx(0.0f));
+        CHECK(mgr.component_surface_offset(3, 2, 2) == Catch::Approx(0.05f));
+        CHECK(mgr.component_surface_offset(3, 2, 3) == Catch::Approx(0.0f));
     }
 
     {
@@ -274,10 +277,10 @@ TEST_CASE("Mixed filament component surface offsets follow the signed bias targe
         row.component_a_surface_offset = offset_a;
         row.component_b_surface_offset = offset_b;
 
-        CHECK(mgr.component_surface_offset(3, 2, 0) == Approx(0.05f));
-        CHECK(mgr.component_surface_offset(3, 2, 1) == Approx(0.0f));
-        CHECK(mgr.component_surface_offset(3, 2, 2) == Approx(0.05f));
-        CHECK(mgr.component_surface_offset(3, 2, 3) == Approx(0.0f));
+        CHECK(mgr.component_surface_offset(3, 2, 0) == Catch::Approx(0.05f));
+        CHECK(mgr.component_surface_offset(3, 2, 1) == Catch::Approx(0.0f));
+        CHECK(mgr.component_surface_offset(3, 2, 2) == Catch::Approx(0.05f));
+        CHECK(mgr.component_surface_offset(3, 2, 3) == Catch::Approx(0.0f));
     }
 }
 
@@ -484,13 +487,15 @@ TEST_CASE("Mixed filament painted-region resolver preserves virtual channels for
     CHECK(mgr.effective_painted_region_filament_id(3, 2, 0) == 3);
     row.component_a_surface_offset = 0.02f;
     row.component_b_surface_offset = -0.02f;
-    CHECK(mgr.component_surface_offset(3, 2, 0) == Approx(0.0f));
+    CHECK(mgr.component_surface_offset(3, 2, 0) == Catch::Approx(0.0f));
 
     row.manual_pattern.clear();
     row.distribution_mode = int(MixedFilament::SameLayerPointillisme);
     CHECK(mgr.effective_painted_region_filament_id(3, 2, 0) == 3);
-    CHECK(mgr.component_surface_offset(3, 2, 0) == Approx(0.0f));
+    CHECK(mgr.component_surface_offset(3, 2, 0) == Catch::Approx(0.0f));
 }
+
+#endif // ENABLE_FULLSPECTRUM
 
 TEST_CASE("ExtrusionPath copies preserve inset index", "[MixedFilament]")
 {
