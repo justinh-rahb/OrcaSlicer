@@ -538,6 +538,14 @@ endif ()
 
 encoding_check(libslic3r)
 
+# MSVC's legacy preprocessor cannot handle the very large BOOST_PP_SEQ_FOR_EACH
+# sequences used by PRINT_CONFIG_CLASS_DEFINE in PrintConfig.hpp.
+# /Zc:preprocessor enables the standards-conforming preprocessor.
+# /wd5105 suppresses C5105 warnings from Windows SDK headers under the new preprocessor.
+if (MSVC)
+    target_compile_options(libslic3r PUBLIC /Zc:preprocessor /wd5105)
+endif ()
+
 target_compile_definitions(libslic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=0)
 if (ENABLE_FULLSPECTRUM)
     target_compile_definitions(libslic3r PUBLIC ENABLE_FULLSPECTRUM)
