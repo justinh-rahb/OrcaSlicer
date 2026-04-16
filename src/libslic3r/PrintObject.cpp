@@ -4087,7 +4087,7 @@ bool PrintObject::update_layer_height_profile(const ModelObject          &model_
 
 #else // !ENABLE_FULLSPECTRUM
 
-bool PrintObject::update_layer_height_profile(const ModelObject &model_object, const SlicingParameters &slicing_parameters, std::vector<coordf_t> &layer_height_profile)
+bool PrintObject::update_layer_height_profile(const ModelObject &model_object, const SlicingParameters &slicing_parameters, std::vector<coordf_t> &layer_height_profile, const PrintObject *print_object)
 {
     bool updated = false;
 
