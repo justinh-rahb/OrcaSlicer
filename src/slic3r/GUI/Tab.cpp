@@ -1604,6 +1604,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         update_wiping_button_visibility();
     }
 
+#ifdef ENABLE_FULLSPECTRUM
     if (opt_key == "dithering_local_z_mode" &&
         boost::any_cast<bool>(value) &&
         (!m_config->has("mixed_filament_region_collapse") ||
@@ -1618,6 +1619,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
             field->set_value(boost::any(false), false);
         update_dirty();
     }
+#endif // ENABLE_FULLSPECTRUM
 
 
     if (opt_key == "single_extruder_multi_material"  ){
@@ -1952,6 +1954,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         return;
     }
 
+#ifdef ENABLE_FULLSPECTRUM
     const bool refresh_mixed_filament_panel =
         m_type == Preset::TYPE_PRINT && opt_key == "mixed_filament_component_bias_enabled";
 
@@ -1978,6 +1981,7 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         if (const ConfigOption *opt = m_config->option(opt_key))
             project_cfg.set_key_value(opt_key, opt->clone());
     }
+#endif // ENABLE_FULLSPECTRUM
 
     update();
     if(m_active_page)
@@ -2475,9 +2479,11 @@ void TabPrint::build()
         optgroup->append_single_option_line("fill_multiline", "strength_settings_infill#fill-multiline");
         optgroup->append_single_option_line("sparse_infill_pattern", "strength_settings_infill#sparse-infill-pattern");
         if (m_type >= Preset::TYPE_COUNT) {
+#ifdef ENABLE_FULLSPECTRUM
             optgroup->append_single_option_line("enable_infill_filament_override");
             optgroup->append_single_option_line("infill_filament_use_base_first_layers");
             optgroup->append_single_option_line("infill_filament_use_base_last_layers");
+#endif // ENABLE_FULLSPECTRUM
             optgroup->append_single_option_line("sparse_infill_filament", "multimaterial_settings_filament_for_features#infill");
         }
         optgroup->append_single_option_line("infill_direction", "strength_settings_infill#direction");
